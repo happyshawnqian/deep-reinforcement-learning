@@ -10,12 +10,14 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 BUFFER_SIZE = int(1e6) # replay buffer size
-BATCH_SIZE = 128       # minibatch size
+BATCH_SIZE = 128        # minibatch size
 GAMMA = 0.99           # discount factor
 TAU = 1e-3             # for soft update of target parameters
 LR_ACTOR = 1e-3        # learning rate of the actor
 LR_CRITIC = 1e-3       # learning rate of the critic
 WEIGHT_DECAY = 0       # L2 weight decay
+LEARN_EVERY = 20       # learning time step interval
+LEARN_NUM = 10         # number of learning passes in one learn
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -31,6 +33,9 @@ class Agent():
             action_size (int): dimension of each action
             random_seed (int): random seed
         """
+
+        #print("agent constructor is called")
+
         self.state_size = state_size
         self.action_size = action_size
         self.seed = random.seed(random_seed)
@@ -43,7 +48,7 @@ class Agent():
         # Critic Network (w/ Target Network)
         self.critic_local = Critic(state_size, action_size, random_seed).to(device)
         self.critic_target = Critic(state_size, action_size, random_seed).to(device)
-        self.critic_optimizer = optim.Adam(self.critic_local.parameters(), lr=LR_CRITIC)
+        self.critic_optimizer = optim.Adam(self.critic_local.parameters(), lr=LR_CRITIC, weight_decay=WEIGHT_DECAY)
 
         # Noise process
         self.noise = OUNoise(action_size, random_seed)
@@ -51,15 +56,16 @@ class Agent():
         # Replay memory
         self.memory = ReplayBuffer(action_size, BUFFER_SIZE, BATCH_SIZE, random_seed)
 
-    def step(self, state, action, reward, next_state, done):
+    def step(self, state, action, reward, next_state, done, timestep):
         """Save experience in replay memory, and use random sample from buffer to learn."""
         # Save experience / reward
         self.memory.add(state, action, reward, next_state, done)
 
         # Learn, if enough samples are available in memory
-        if len(self.memory) > BATCH_SIZE:
-            experiences = self.memory.sample()
-            self.learn(experiences, GAMMA)
+        if len(self.memory) > BATCH_SIZE and timestep % LEARN_EVERY == 0:
+            for _ in range(LEARN_NUM):
+                experiences = self.memory.sample()
+                self.learn(experiences, GAMMA)
 
     def act(self, state, add_noise=True):
         """Returns actions for given state as per current policy"""
@@ -101,7 +107,6 @@ class Agent():
         # Minimize the loss
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.critic_local.parameters(), 1)
         self.critic_optimizer.step()
 
         # ---------------------------- update actor ---------------------------- #
@@ -112,6 +117,9 @@ class Agent():
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()
+        
+        # ---------------------------- reset noise ---------------------------- #
+        self.noise.reset()
 
         # ----------------------- update target networks ----------------------- #
         self.soft_update(self.critic_local, self.critic_target, TAU)
