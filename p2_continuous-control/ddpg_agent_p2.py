@@ -34,7 +34,7 @@ class Agent():
             random_seed (int): random seed
         """
 
-        #print("agent constructor is called")
+        print("agent constructor is called")
 
         self.state_size = state_size
         self.action_size = action_size
@@ -119,7 +119,7 @@ class Agent():
         self.actor_optimizer.step()
         
         # ---------------------------- reset noise ---------------------------- #
-        self.noise.reset()
+        self.noise.reset() # reset to the long-running mean
 
         # ----------------------- update target networks ----------------------- #
         self.soft_update(self.critic_local, self.critic_target, TAU)
@@ -142,7 +142,13 @@ class OUNoise:
     """Ornstein-Uhlenbeck process."""
 
     def __init__(self, size, seed, mu=0., theta=0.15, sigma=0.2):
-        """Initialize parameters and noise process."""
+        """Initialize parameters and noise process.
+        Params
+        ======
+            mu: long-running mean
+            theta: the speed of mean reversion
+            sigma: the volatility parameter
+        """
         self.mu = mu * np.ones(size)
         self.theta = theta
         self.sigma = sigma
